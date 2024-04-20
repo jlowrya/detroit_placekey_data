@@ -4,6 +4,8 @@ import pandas as pd
 import placekey as pk
 import matplotlib.pyplot as plt
 
+from geojson import Point, Feature, FeatureCollection, dump
+
 def add_geo_pk(row):
     return pk.geo_to_placekey(row["Y"], row["X"])
 
@@ -54,41 +56,65 @@ def drop_non_initial_sales_for_properties(sales_df):
     return sales_df
 
 
-blight_df = pd.read_csv("./Blight_Violations.csv")
-blight_df = blight_df.dropna(subset=['X', 'Y', 'violation_address'])
-blight_df = drop_future_dates(blight_df, "violation_date")
+# blight_df = pd.read_csv("./Blight_Violations.csv")
+# blight_df = blight_df.dropna(subset=['X', 'Y', 'violation_address'])
+# blight_df = drop_future_dates(blight_df, "violation_date")
 
 
-sales_df = pd.read_csv("./Property_Sales.csv")
-sales_df = sales_df.dropna(subset=['X', 'Y', 'address'])
-sales_df = drop_future_dates(sales_df, "sale_date")
+# sales_df = pd.read_csv("./Property_Sales.csv")
+# sales_df = sales_df.dropna(subset=['X', 'Y', 'address'])
+# sales_df = drop_future_dates(sales_df, "sale_date")
 
 
-blight_df["placekey"] = blight_df.apply(lambda row: pk.geo_to_placekey(row["Y"], row["X"]), axis=1)
+# blight_df["placekey"] = blight_df.apply(lambda row: pk.geo_to_placekey(row["Y"], row["X"]), axis=1)
 
-sales_df["placekey"] = sales_df.apply(lambda row: pk.geo_to_placekey(row["Y"], row["X"]), axis=1)
+# sales_df["placekey"] = sales_df.apply(lambda row: pk.geo_to_placekey(row["Y"], row["X"]), axis=1)
 
-blight_df["pk_violation_count"] = blight_df.groupby('placekey')['placekey'].transform('count')
-sales_df["pk_sales_count"] = sales_df.groupby('placekey')['placekey'].transform('count')
+# blight_df["pk_violation_count"] = blight_df.groupby('placekey')['placekey'].transform('count')
+# sales_df["pk_sales_count"] = sales_df.groupby('placekey')['placekey'].transform('count')
 
-blight_df = drop_duplicate_entries(blight_df, "placekey")
-sales_df = drop_duplicate_entries(sales_df, "placekey")
+# blight_df = drop_duplicate_entries(blight_df, "placekey")
+# sales_df = drop_duplicate_entries(sales_df, "placekey")
 
-cols_to_keep = {"placekey", "pk_violation_count", "pk_sales_count"}
+# cols_to_keep = {"placekey", "pk_violation_count", "pk_sales_count"}
 
-blight_df = blight_df.drop(labels=[col for col in blight_df.columns if col not in cols_to_keep], axis=1)
-sales_df = sales_df.drop(labels=[col for col in sales_df.columns if col not in cols_to_keep], axis=1)
+# blight_df = blight_df.drop(labels=[col for col in blight_df.columns if col not in cols_to_keep], axis=1)
+# sales_df = sales_df.drop(labels=[col for col in sales_df.columns if col not in cols_to_keep], axis=1)
 
-pk_merged = blight_df.merge(sales_df, on="placekey")
-pk_merged.sort_values("placekey")
+# pk_merged = blight_df.merge(sales_df, on="placekey")
+# pk_merged.sort_values("placekey")
 
-pk_merged.to_csv("./pk_merged.csv")
+# pk_merged.to_csv("./pk_merged.csv")
 
-plt.scatter(pk_merged["pk_violation_count"], pk_merged["pk_sales_count"])
-plt.title("Number of home sales as a function of blight violations for a given placekey")
-plt.xlabel("Number of blight violations")
-plt.ylabel("Number of home sales")
-plt.show()
+# plt.scatter(pk_merged["pk_violation_count"], pk_merged["pk_sales_count"])
+# plt.title("Number of home sales as a function of blight violations for a given placekey")
+# plt.xlabel("Number of blight violations")
+# plt.ylabel("Number of home sales")
+# plt.show()
+
+merged = pd.read_csv("./pk_merged.csv")
+merged = merged.set_index("placekey")
+features = [Feature(geometry=pk.placekey_to_polygon(pkey, geo_json=True), properties={"placekey": pkey}) for pkey in merged.index]
+
+for feature in features:
+    pkey = feature.properties["placekey"]
+    row = merged.loc[merged.index == pkey]
+    # print(type(row.pk_violation_count[0]))
+    new_properties = {
+        "placekey": pkey,
+        "violation_count": int(row["pk_violation_count"][0]),
+        "sales_count": int(row["pk_sales_count"][0])
+    }
+    feature.properties=new_properties
+
+feature_collection = FeatureCollection(features)
+
+with open("detroit_placekeys.geojson", "w") as f:
+    dump(feature_collection, f)
+f.close()
+
+
+
 
 
 
